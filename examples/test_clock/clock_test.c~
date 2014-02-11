@@ -1,0 +1,83 @@
+#include "contiki.h"
+#include "net/rime.h"
+#include "random.h"
+#include "dev/leds.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/clock.h>
+
+#define CLOCK_BITS 32
+#define CLOCK_CHAR_LEN CLOCK_BITS+1
+
+void print_leds();
+/*---------------------------------------------------------------------------*/
+PROCESS(clock_test, "Closk test");
+AUTOSTART_PROCESSES(&clock_test);
+/*---------------------------------------------------------------------------*/
+static void
+abc_recv(struct abc_conn *c)
+{
+  unsigned long now = clock_time();
+  char* recv_str = (char *)packetbuf_dataptr();
+  unsigned long recv = atoi(recv_str);
+  long diff = now-recv;
+  uint16_t delay;
+  
+  printf("------\n");
+  printf("now: %lu\n", now);
+  printf("recv: %lu\n", recv);
+  printf("diff: %ld\n", diff);
+
+  if(now > recv){
+    delay = now-recv;
+    clock_wait(delay);
+  }
+}
+static const struct abc_callbacks abc_call = {abc_recv};
+static struct abc_conn abc;
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(clock_test, ev, data)
+{
+  static struct etimer et;
+  unsigned long now;
+  char clk_char[CLOCK_CHAR_LEN];
+
+  PROCESS_EXITHANDLER(abc_close(&abc);)
+  PROCESS_BEGIN();
+  /* init */
+  abc_open(&abc, 128, &abc_call);
+  clock_init();
+  now = 0;
+  
+  while(1) {
+    etimer_set(&et, CLOCK_SECOND*3);
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+    /*---Wait---*/
+    leds_invert(LEDS_RED);
+  
+    now = clock_time();
+    
+    memset(clk_char, 0, CLOCK_CHAR_LEN);
+    sprintf(clk_char, "%lu", now);
+
+    packetbuf_copyfrom(clk_char, CLOCK_CHAR_LEN);
+    abc_send(&abc);
+  }
+
+  PROCESS_END();
+}
+/*---------------------------------------------------------------------------*/
+
+void
+print_leds(){
+  unsigned char ledst = leds_get();
+  int green, yellow, red;
+
+  green = ledst&LEDS_GREEN;
+  yellow = (ledst&LEDS_YELLOW)>>1;
+  red = (ledst&LEDS_RED)>>2;
+  
+  printf("ledfd:%u%u%u\n", yellow, green, red);
+}

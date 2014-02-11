@@ -1,0 +1,32 @@
+#include "contiki.h"
+#include "random.h"
+#include "dev/leds.h"
+
+#include <stdio.h>
+
+/*---------------------------------------------------------------------------*/
+PROCESS(blink, "Blink test");
+AUTOSTART_PROCESSES(&blink);
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(blink, ev, data)
+{
+  static struct etimer et;
+  PROCESS_BEGIN();
+
+  unsigned char ledfd;
+  ledfd = leds_get();
+
+  while(1) {
+    /* Delay 2-4 seconds */
+    etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 2));
+
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+    leds_toggle(ledfd);
+    
+    printf("abc message sent\n");
+  }
+
+  PROCESS_END();
+}
+/*---------------------------------------------------------------------------*/
