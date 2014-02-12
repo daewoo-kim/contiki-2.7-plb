@@ -61,7 +61,7 @@
 /*---------------------------------------------------------------------------*/
 /* Constans */
 #define RTIMER_ARCH_MSECOND RTIMER_ARCH_SECOND/100
-#define BEACON_NUM_MAX 1 //3 //kdw
+#define BEACON_NUM_MAX 50 //3 //kdw
 #define PC_ON_TIME RTIMER_ARCH_MSECOND*100
 #define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
 #define MAX_BEACON_SIZE 100
@@ -140,7 +140,7 @@ plb_off(int keep_radio_on)
 /*---------------------------------------------------------------------------*/
 static void
 radio_on(){
-//  PRINTF("radio_on\n");
+  PRINTF("radio_on\n");
 
   if(is_radio_on ==0){
     NETSTACK_RADIO.on();
@@ -150,7 +150,7 @@ radio_on(){
 static void
 radio_off(){
 
-//  PRINTF("radio_off\n");
+  PRINTF("radio_off\n");
 
   if(is_radio_on ==1){
     NETSTACK_RADIO.off();
@@ -243,7 +243,6 @@ plb_input(void)
 
   original_datalen = packetbuf_datalen();
   original_dataptr = packetbuf_dataptr();
-  print_packet(original_dataptr, original_datalen);
   if(NETSTACK_FRAMER.parse() < 0) {
     PRINTF("nullrdc: failed to parse %u\n", packetbuf_datalen());
     return;
@@ -251,7 +250,7 @@ plb_input(void)
 
   if (type == 1) // if type == beacon
   {
-/*
+
 	  // send ack
 		uint8_t ack[MAX_ACK_SIZE];
 		int ack_len = 0;
@@ -282,7 +281,7 @@ plb_input(void)
 			return ;
 		}
 		radio_off();
-*/
+
 		//////////////////////////////////////////
 
 		if (strobe_type == 1)	//beacon_sd
@@ -360,7 +359,7 @@ static int
 plb_wait_ack(void)
 {
 
-//  PRINTF("plb_wait_ack\n");
+  PRINTF("plb_wait_ack\n");
 
   wait_packet = 1;
   
@@ -371,7 +370,7 @@ plb_wait_ack(void)
   if((NETSTACK_RADIO.receiving_packet() ||
       NETSTACK_RADIO.pending_packet() ||
       NETSTACK_RADIO.channel_clear() == 0)) {
-//	  PRINTF("plb_wait_ack: have some packet\n");
+	  PRINTF("plb_wait_ack: have some packet\n");
     int len;
     uint8_t ackbuf[ACK_LEN + 2];
       
@@ -394,7 +393,7 @@ plb_wait_ack(void)
 static char
 plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
 {
-//  PRINTF("plb_send_strobe; dst: %u.%u\n",dst->u8[0],dst->u8[1]);
+  PRINTF("plb_send_strobe; dst: %u.%u\n",dst->u8[0],dst->u8[1]);
 
   uint8_t beacon[MAX_BEACON_SIZE];
   int beacon_len = 0;
@@ -484,7 +483,7 @@ static char
 plb_powercycle(void)
 {
 
-//  PRINTF("plb_powercycle\n");
+  PRINTF("plb_powercycle\n");
 
   PT_BEGIN(&pt);
 
@@ -502,7 +501,7 @@ plb_powercycle(void)
     
     /* off */
     if(wait_packet == 0){
-//      radio_off();
+      radio_off();
     }
     rtimer_set(&rt, RTIMER_NOW() + PC_OFF_TIME, 1,
 	       (void (*)(struct rtimer *, void *))plb_powercycle, NULL);

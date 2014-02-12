@@ -36,7 +36,7 @@
  *         Joakim Eriksson <joakime@sics.se>
  */
 
-#include "net/mac/framer-nullmac.h"
+#include "net/mac/framer-plb.h"
 #include "net/packetbuf.h"
 
 #define DEBUG 0
@@ -50,7 +50,7 @@
 #define PRINTADDR(addr)
 #endif
 
-struct nullmac_hdr {
+struct plb_hdr {
   rimeaddr_t receiver;
   rimeaddr_t sender;
 };
@@ -59,14 +59,13 @@ struct nullmac_hdr {
 static int
 create(void)
 {
-  printf("framer-nullmac\n");
-  struct nullmac_hdr *hdr;
+  struct plb_hdr *hdr;
 
-  if(packetbuf_hdralloc(sizeof(struct nullmac_hdr))) {
+  if(packetbuf_hdralloc(sizeof(struct plb_hdr))) {
     hdr = packetbuf_hdrptr();
     rimeaddr_copy(&(hdr->sender), &rimeaddr_node_addr);
     rimeaddr_copy(&(hdr->receiver), packetbuf_addr(PACKETBUF_ADDR_RECEIVER));
-    return sizeof(struct nullmac_hdr);
+    return sizeof(struct plb_hdr);
   }
   PRINTF("PNULLMAC-UT: too large header: %u\n", len);
   return FRAMER_FAILED;
@@ -75,9 +74,9 @@ create(void)
 static int
 parse(void)
 {
-  struct nullmac_hdr *hdr;
+  struct plb_hdr *hdr;
   hdr = packetbuf_dataptr();
-  if(packetbuf_hdrreduce(sizeof(struct nullmac_hdr))) {
+  if(packetbuf_hdrreduce(sizeof(struct plb_hdr))) {
     packetbuf_set_addr(PACKETBUF_ADDR_SENDER, &(hdr->sender));
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, &(hdr->receiver));
 
@@ -86,11 +85,11 @@ parse(void)
     PRINTADDR(packetbuf_addr(PACKETBUF_ADDR_RECEIVER));
     PRINTF("%u (%u)\n", packetbuf_datalen(), len);
 
-    return sizeof(struct nullmac_hdr);
+    return sizeof(struct plb_hdr);
   }
   return FRAMER_FAILED;
 }
 /*---------------------------------------------------------------------------*/
-const struct framer framer_nullmac = {
+const struct framer framer_plb = {
   create, parse
 };
