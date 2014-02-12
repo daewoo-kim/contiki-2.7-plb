@@ -74,7 +74,7 @@
 #define NETSTACK_CONF_RDC     plb_driver
 #define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 8
 #define NETSTACK_CONF_FRAMER  framer_802154
-
+//#define NETSTACK_CONF_FRAMER  framer_nullmac
 #define CC2420_CONF_AUTOACK              1
 
 #define COLLECT_CONF_ANNOUNCEMENTS       1

@@ -49,7 +49,7 @@
 #include <string.h>/*need?*/
 #include <stdio.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
@@ -61,10 +61,11 @@
 /*---------------------------------------------------------------------------*/
 /* Constans */
 #define RTIMER_ARCH_MSECOND RTIMER_ARCH_SECOND/100
-#define BEACON_NUM_MAX 3
+#define BEACON_NUM_MAX 50 //3 //kdw
 #define PC_ON_TIME RTIMER_ARCH_MSECOND*100
 #define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
 #define MAX_BEACON_SIZE 100
+#define MAX_ACK_SIZE 100
 
 #define INTER_PACKET_INTERVAL              RTIMER_ARCH_SECOND / 5000
 #define ACK_LEN 3
@@ -86,8 +87,11 @@ static int is_radio_on;
 static int is_init = 0;
 static int is_plb_on = 0;
 
-static unsigned char addr_src[RIMEADDR_SIZE];
-static unsigned char addr_dst[RIMEADDR_SIZE];
+static rimeaddr_t addr_src;
+static rimeaddr_t addr_dst;
+static rimeaddr_t addr_ack;
+
+static int c_wait = 0;
 
 /* send */
 static mac_callback_t sent_callback;
@@ -99,21 +103,23 @@ static int plb_beacon_ds(void);
 static void hold_time(rtimer_clock_t interval);
 static void print_packet(uint8_t *packet, int len);
 static void plb_init(void);
+static int plb_create_header(rimeaddr_t *dst, uint16_t type);
+
 /*---------------------------------------------------------------------------*/
 static int
 plb_on(void)
 {
-#if PRINT_FUNC
-  printf("plb_on\n");
-#endif
+  PRINTF("plb_on\n");
+
   if(!is_plb_on){
     is_plb_on = 1;
+    c_wait = 0;
     plb_beacon_sd();
     plb_beacon_ds();
     plb_powercycle();
   }
   else{
-    printf("already on\n");
+    PRINTF("already on\n");
   }
 
   return 0;
@@ -127,16 +133,15 @@ plb_off(int keep_radio_on)
   if(wait_packet) {
     return NETSTACK_RADIO.on();
   } else {
-    return NETSTACK_RADIO.off();
     is_plb_on = 0;
+    return NETSTACK_RADIO.off();
   }
 }
 /*---------------------------------------------------------------------------*/
 static void
 radio_on(){
-#if PRINT_FUNC
-  printf("radio_on\n");
-#endif
+  PRINTF("radio_on\n");
+
   if(is_radio_on ==0){
     NETSTACK_RADIO.on();
     is_radio_on = 1;
@@ -144,9 +149,9 @@ radio_on(){
 }
 static void
 radio_off(){
-#if PRINT_FUNC
-  printf("radio_off\n");
-#endif
+
+  PRINTF("radio_off\n");
+
   if(is_radio_on ==1){
     NETSTACK_RADIO.off();
     is_radio_on = 0;
@@ -156,9 +161,8 @@ radio_off(){
 static int
 plb_send_data(mac_callback_t sent, void *ptr)
 {
-#if PRINT_FUNC
-  printf("send_one_packet\n");
-#endif
+
+  PRINTF("send_one_packet\n");
 
   int ret;
   int last_sent_ok = 0;
@@ -197,9 +201,8 @@ plb_send_data(mac_callback_t sent, void *ptr)
 static void
 plb_send(mac_callback_t sent, void *ptr)
 {
-#if PRINT_FUNC
-  printf("plb_send\n");
-#endif
+  PRINTF("plb_send\n");
+
   send_req = 1;
   sent_callback = sent;
   sent_ptr = ptr;
@@ -230,9 +233,11 @@ plb_send_list(mac_callback_t sent, void *ptr, struct rdc_buf_list *buf_list)
 static void
 plb_input(void)
 {
-#if PRINT_FUNC
-  printf("plb_input\n");
-#endif
+  PRINTF("plb_input\n");
+  uint8_t type = 1;	// type: beacon, data, sync
+  uint8_t strobe_type = ((uint8_t *) packetbuf_dataptr())[9];	//strobe_type: beacon_sd,beacon_ds,preable
+
+  printf("type: %u\n", strobe_type);
   int original_datalen;
   uint8_t *original_dataptr;
 
@@ -240,10 +245,58 @@ plb_input(void)
   original_dataptr = packetbuf_dataptr();
   if(NETSTACK_FRAMER.parse() < 0) {
     PRINTF("nullrdc: failed to parse %u\n", packetbuf_datalen());
+    return;
   } 
-  else {
-    NETSTACK_MAC.input();
+
+  if (type == 1) // if type == beacon
+  {
+
+	  // send ack
+		uint8_t ack[MAX_ACK_SIZE];
+		int ack_len = 0;
+		int common_len = 0;
+		PRINTF("plb_send_ack; dst: %u.%u\n",packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0],packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[1]);
+		if ((common_len = plb_create_header(packetbuf_addr(PACKETBUF_ADDR_SENDER), (uint16_t)4)) < 0) // type 4 = ack
+		{
+			PRINTF("ERROR: plb_create_header ");
+			return;
+		}
+		//Make ack frame//
+		ack_len = common_len + 1;//sizeof(struct plb_beacon_hdr);
+		if (ack_len > (int) sizeof(ack)) {
+			// Failed to send //
+			PRINTF("plb: send failed, too large header\n");
+			return ;
+		}
+		memcpy(ack, packetbuf_hdrptr(), common_len);
+		ack[common_len] = 4;// type 4 = ack
+		PRINTF("(ack)pbe len: %u | %u\n", packetbuf_hdrlen(), packetbuf_datalen()); PRINTF("data: %s\n", (char*) packetbuf_dataptr());
+
+		// Send beacon and wait ack : BEACON_NUM_MAX times //
+		radio_on();
+		PRINTF("plb: send strobe ack \n");
+		print_packet(ack, ack_len);
+		if (NETSTACK_RADIO.send(ack, ack_len) != RADIO_TX_OK) {
+			PRINTF("ERROR: plb ack send");
+			return ;
+		}
+		radio_off();
+
+		//////////////////////////////////////////
+
+		if (strobe_type == 1)	//beacon_sd
+		{
+			PRINTF("input: beacon_sd -> set c_wait \n");
+			c_wait = 1;
+		}
+		else if (strobe_type == 3) //preamble // send ack and wait for packet
+		{
+			PRINTF("input: preamble -> wait for listen\n");
+		}
   }
+
+  NETSTACK_MAC.input();
+
 }
 /*---------------------------------------------------------------------------*/
 static unsigned short
@@ -255,9 +308,9 @@ plb_channel_check_interval(void)
 static void
 plb_init(void)
 {
-#if PRINT_FUNC
-  printf("plb_init\n");
-#endif
+
+  PRINTF("plb_init\n");
+
   PT_INIT(&pt);
   dst_acked = 0;
   src_acked = 0;
@@ -265,17 +318,16 @@ plb_init(void)
   wait_packet = 0;
   is_init = 1;
 
-  //plb_on
-  rtimer_set(&rt, RTIMER_NOW() + RTIMER_ARCH_SECOND, 1,
-	     (void (*)(struct rtimer *, void *))plb_on, NULL);
+  //plb_on //not use this, plb_on is called from app
+  //  rtimer_set(&rt, RTIMER_NOW() + RTIMER_ARCH_SECOND, 1,(void (*)(struct rtimer *, void *))plb_on, NULL);
 
   /* init addr_src, addr_dst */
-  addr_dst[0] = rimeaddr_node_addr.u8[0]+1;
+  addr_dst.u8[0] = rimeaddr_node_addr.u8[0]+1;
   if(rimeaddr_node_addr.u8[0] > 0){
-    addr_src[0] = rimeaddr_node_addr.u8[0]-1;
+    addr_src.u8[0] = rimeaddr_node_addr.u8[0]-1;
   }
   else{
-    addr_src[0] = 0;
+    addr_src.u8[0] = 0;
   }
 
 
@@ -283,19 +335,18 @@ plb_init(void)
 /*---------------------------------------------------------------------------*/
 /* Put common frame header into packetbuf */
 static int
-plb_create_header(unsigned char *dst)
+plb_create_header(rimeaddr_t *dst, uint16_t type)
 {
-#if PRINT_FUNC
-  printf("plb_create_header\n");
-#endif
+  PRINTF("plb_create_header\n");
+
   /* Set address */
   packetbuf_set_addr(PACKETBUF_ADDR_SENDER, &rimeaddr_node_addr);
+
+//  packetbuf_attr_t temp_type = type; // for framer.create; not used now
   int i=0;
   for(i=0; i<RIMEADDR_SIZE; i++){
     packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, dst);
   }
-
-  //packetbuf_set_attr(PACKETBUF_ATTR_MAC_ACK, 1);/*if framer make light weight header, ACK setting is not needed. If it use default framer, it is needed for ligth weight*/
 
   /* Create frame */
   int len =0;
@@ -307,18 +358,19 @@ plb_create_header(unsigned char *dst)
 static int
 plb_wait_ack(void)
 {
-#if PRINT_FUNC
-  printf("plb_wait_ack\n");
-#endif
+
+  PRINTF("plb_wait_ack\n");
+
   wait_packet = 1;
   
   int ack_received = 0;
-  hold_time(INTER_PACKET_INTERVAL);
+  hold_time(INTER_PACKET_INTERVAL*10);
   
   /* Check for incoming ACK. */
   if((NETSTACK_RADIO.receiving_packet() ||
       NETSTACK_RADIO.pending_packet() ||
       NETSTACK_RADIO.channel_clear() == 0)) {
+	  PRINTF("plb_wait_ack: have some packet\n");
     int len;
     uint8_t ackbuf[ACK_LEN + 2];
       
@@ -329,6 +381,7 @@ plb_wait_ack(void)
     if(len == ACK_LEN) {
       /* fill this : ack check */
       ack_received = 1;
+      PRINTF("plb_wait_ack: ACKED\n");
     }
   }
 
@@ -338,17 +391,16 @@ plb_wait_ack(void)
 }
 /*---------------------------------------------------------------------------*/
 static char
-plb_beacon_send(unsigned char *dst, int *acked)
+plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
 {
-#if PRINT_FUNC
-  printf("plb_beacon_send\n");
-#endif
+  PRINTF("plb_send_strobe; dst: %u.%u\n",dst->u8[0],dst->u8[1]);
+
   uint8_t beacon[MAX_BEACON_SIZE];
   int beacon_len = 0;
   int common_len = 0;
   /*Make common frame*/
   /* fill this: /net/rime/rimeaddr.h addr modify is needed */
-  if( (common_len = plb_create_header(dst)) < 0 ){
+  if( (common_len = plb_create_header(dst,type)) < 0 ){
     return -1;
   }
   /*Make beacon frame*/
@@ -359,15 +411,14 @@ plb_beacon_send(unsigned char *dst, int *acked)
     return -1;
   }
   memcpy(beacon, packetbuf_hdrptr(), common_len);
-  beacon[common_len] = TYPE_BEACON;
-  printf("pbe len: %u | %u\n", packetbuf_hdrlen(), packetbuf_datalen());
-  printf("data: %s\n", (char*) packetbuf_dataptr());
+  beacon[common_len] = (uint8_t)type;//TYPE_BEACON;	////////////////////////////////////////////////
+  PRINTF("pbe len: %u | %u\n", packetbuf_hdrlen(), packetbuf_datalen());
+  PRINTF("data: %s\n", (char*) packetbuf_dataptr());
 
   /* Send beacon and wait ack : BEACON_NUM_MAX times */
   int beacon_num = 0;
   radio_on();
   while((beacon_num < BEACON_NUM_MAX) && ((*acked) == 0)){
-    printf("beacon send len: %d\n", beacon_len);
     print_packet(beacon, beacon_len);
     if(NETSTACK_RADIO.send(beacon, beacon_len) != RADIO_TX_OK){
       return -1;
@@ -387,21 +438,23 @@ plb_beacon_send(unsigned char *dst, int *acked)
 static int
 plb_beacon_sd(void)
 {
-#if PRINT_FUNC
-  printf("plb_beacon_sd\n");
-#endif
+  PRINTF("plb_beacon_sd;  to %u.%u \n",addr_dst.u8[0],addr_dst.u8[1]);
+
   /* send beacon */
-  if(plb_beacon_send(addr_dst, &dst_acked) < 0){
+  if(plb_send_strobe(&addr_dst, &dst_acked,1) < 0){
     return MAC_TX_ERR_FATAL;
   }
   
-  /* send data */
+  /* send data 
+   * if this node is end node
+   */
   if(dst_acked){
-    if(send_req){
+    PRINTF("beacon_sd_acked : set c_wait");
+    /*if(send_req){
       if(has_data){
-	/* fill this: send data to destination */
+      // fill this: send data to destination 
       }
-    }
+    }*/
   }
   return 0;
 }
@@ -409,16 +462,18 @@ plb_beacon_sd(void)
 static int
 plb_beacon_ds(void)
 {
-#if PRINT_FUNC
-  printf("plb_beacon_ds\n");
-#endif
+
+  PRINTF("plb_beacon_ds;  to %u.%u \n",addr_src.u8[0],addr_src.u8[1]);
+
   /* send beacon */
-  if(plb_beacon_send(addr_src, &src_acked) < 0){
+  if(plb_send_strobe(&addr_src, &src_acked,2) < 0){
     return MAC_TX_ERR_FATAL;
   }
   
   /* wait for data */
   if(src_acked){
+    PRINTF("beacon_sd_acked : set c_wait");
+    c_wait = 1;
     /*fill this*/
   }
   return 0;
@@ -427,9 +482,9 @@ plb_beacon_ds(void)
 static char
 plb_powercycle(void)
 {
-#if PRINT_FUNC
-  printf("plb_powercycle\n");
-#endif
+
+  PRINTF("plb_powercycle\n");
+
   PT_BEGIN(&pt);
 
   while(1) {
@@ -477,15 +532,15 @@ static void print_packet(uint8_t *packet, int len)
       num2 = num&jisu;
       num2 = num2 >> j;
       if(num&jisu){
-	printf("1");
+    	  PRINTF("1");
       }
       else{
-	printf("0");
+    	  PRINTF("0");
       }
     } 
-    printf(" ");
+    PRINTF(" ");
   }
-  printf("\n");
+  PRINTF("\n");
 }
 /*---------------------------------------------------------------------------*/
 const struct rdc_driver plb_driver = {

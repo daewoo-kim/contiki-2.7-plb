@@ -100,6 +100,9 @@ create(void)
     mac_dsn = random_rand() & 0xff;
   }
 
+  /* add type // kdw */
+//  params.temp_type = packetbuf_attr(PACKETBUF_ATTR_TEMP_TYPE);
+
   /* Build the FCF. */
   params.fcf.frame_type = FRAME802154_DATAFRAME;
   params.fcf.security_enabled = 0;
@@ -206,6 +209,10 @@ parse(void)
     packetbuf_set_attr(PACKETBUF_ATTR_PENDING, frame.fcf.frame_pending);
     /*    packetbuf_set_attr(PACKETBUF_ATTR_RELIABLE, frame.fcf.ack_required);*/
     packetbuf_set_attr(PACKETBUF_ATTR_PACKET_ID, frame.seq);
+
+    /* get type from input data // kdw*/
+//    packetbuf_set_attr(PACKETBUF_ATTR_TEMP_TYPE, frame.temp_type);
+
 
     PRINTF("15.4-IN: %2X", frame.fcf.frame_type);
     PRINTADDR(packetbuf_addr(PACKETBUF_ADDR_SENDER));
