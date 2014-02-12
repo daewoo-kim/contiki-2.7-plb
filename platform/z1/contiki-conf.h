@@ -69,13 +69,13 @@
 #define NETSTACK_CONF_NETWORK rime_driver
 //#define NETSTACK_CONF_MAC     csma_driver
 #define NETSTACK_CONF_MAC     nullmac_driver
-//#define NETSTACK_CONF_RDC     contikimac_driver
+#define NETSTACK_CONF_RDC     contikimac_driver
 //#define NETSTACK_CONF_RDC     xmac_driver
-#define NETSTACK_CONF_RDC     plb_driver
+//#define NETSTACK_CONF_RDC     plb_driver
 #define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 8
-//#define NETSTACK_CONF_FRAMER  framer_802154
+#define NETSTACK_CONF_FRAMER  framer_802154
 //#define NETSTACK_CONF_FRAMER  framer_nullmac
-#define NETSTACK_CONF_FRAMER  framer_plb
+//#define NETSTACK_CONF_FRAMER  framer_plb
 #define CC2420_CONF_AUTOACK              1
 
 #define COLLECT_CONF_ANNOUNCEMENTS       1

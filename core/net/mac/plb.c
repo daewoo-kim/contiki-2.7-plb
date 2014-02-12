@@ -61,14 +61,14 @@
 /*---------------------------------------------------------------------------*/
 /* Constans */
 #define RTIMER_ARCH_MSECOND RTIMER_ARCH_SECOND/100
-#define BEACON_NUM_MAX 1 //3 //kdw
+#define BEACON_NUM_MAX 3 //3 //kdw
 #define PC_ON_TIME RTIMER_ARCH_MSECOND*100
 #define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
 #define MAX_BEACON_SIZE 100
 #define MAX_ACK_SIZE 100
 
 #define INTER_PACKET_INTERVAL              RTIMER_ARCH_SECOND / 5000
-#define ACK_LEN 3
+#define ACK_LEN 100
 #define AFTER_ACK_DETECTECT_WAIT_TIME      RTIMER_ARCH_SECOND / 1000
 /*---------------------------------------------------------------------------*/
 /* Static variables */
@@ -101,6 +101,7 @@ static char plb_powercycle(void);
 static int plb_beacon_sd(void);
 static int plb_beacon_ds(void);
 static void hold_time(rtimer_clock_t interval);
+static void recv_time(rtimer_clock_t interval);
 static void print_packet(uint8_t *packet, int len);
 static void plb_init(void);
 static int plb_create_header(rimeaddr_t *dst, uint16_t type);
@@ -140,7 +141,7 @@ plb_off(int keep_radio_on)
 /*---------------------------------------------------------------------------*/
 static void
 radio_on(){
-//  PRINTF("radio_on\n");
+  PRINTF("radio_on\n");
 
   if(is_radio_on ==0){
     NETSTACK_RADIO.on();
@@ -150,7 +151,7 @@ radio_on(){
 static void
 radio_off(){
 
-//  PRINTF("radio_off\n");
+  PRINTF("radio_off\n");
 
   if(is_radio_on ==1){
     NETSTACK_RADIO.off();
@@ -243,7 +244,6 @@ plb_input(void)
 
   original_datalen = packetbuf_datalen();
   original_dataptr = packetbuf_dataptr();
-  print_packet(original_dataptr, original_datalen);
   if(NETSTACK_FRAMER.parse() < 0) {
     PRINTF("nullrdc: failed to parse %u\n", packetbuf_datalen());
     return;
@@ -251,7 +251,7 @@ plb_input(void)
 
   if (type == 1) // if type == beacon
   {
-/*
+
 	  // send ack
 		uint8_t ack[MAX_ACK_SIZE];
 		int ack_len = 0;
@@ -282,7 +282,7 @@ plb_input(void)
 			return ;
 		}
 		radio_off();
-*/
+
 		//////////////////////////////////////////
 
 		if (strobe_type == 1)	//beacon_sd
@@ -360,30 +360,33 @@ static int
 plb_wait_ack(void)
 {
 
-//  PRINTF("plb_wait_ack\n");
+  PRINTF("plb_wait_ack\n");
 
   wait_packet = 1;
   
   int ack_received = 0;
-  hold_time(INTER_PACKET_INTERVAL*10);
+  recv_time(INTER_PACKET_INTERVAL*5000);
   
+  //// test
+//  printf("%d, %d, %d",NETSTACK_RADIO.receiving_packet(),NETSTACK_RADIO.pending_packet(),NETSTACK_RADIO.channel_clear());
+  ////
+
   /* Check for incoming ACK. */
   if((NETSTACK_RADIO.receiving_packet() ||
       NETSTACK_RADIO.pending_packet() ||
       NETSTACK_RADIO.channel_clear() == 0)) {
-//	  PRINTF("plb_wait_ack: have some packet\n");
-    int len;
-    uint8_t ackbuf[ACK_LEN + 2];
+	  PRINTF("plb_wait_ack: have some packet\n");
+
       
-    hold_time(AFTER_ACK_DETECTECT_WAIT_TIME);
+//    hold_time(AFTER_ACK_DETECTECT_WAIT_TIME);
+//
+//    len = NETSTACK_RADIO.read(ackbuf, ACK_LEN);
     
-    len = NETSTACK_RADIO.read(ackbuf, ACK_LEN);
-    
-    if(len == ACK_LEN) {
-      /* fill this : ack check */
-      ack_received = 1;
-      PRINTF("plb_wait_ack: ACKED\n");
-    }
+//    if(len == ACK_LEN) {
+//      /* fill this : ack check */
+//      ack_received = 1;
+//      PRINTF("plb_wait_ack: ACKED\n");
+//    }
   }
 
   wait_packet = 0;
@@ -394,11 +397,12 @@ plb_wait_ack(void)
 static char
 plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
 {
-//  PRINTF("plb_send_strobe; dst: %u.%u\n",dst->u8[0],dst->u8[1]);
+  PRINTF("plb_send_strobe; dst: %u.%u\n",dst->u8[0],dst->u8[1]);
 
   uint8_t beacon[MAX_BEACON_SIZE];
   int beacon_len = 0;
   int common_len = 0;
+  rtimer_clock_t wt;
   /*Make common frame*/
   /* fill this: /net/rime/rimeaddr.h addr modify is needed */
   if( (common_len = plb_create_header(dst,type)) < 0 ){
@@ -420,17 +424,26 @@ plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
   int beacon_num = 0;
   radio_on();
   while((beacon_num < BEACON_NUM_MAX) && ((*acked) == 0)){
-    print_packet(beacon, beacon_len);
+    //print_packet(beacon, beacon_len);
     if(NETSTACK_RADIO.send(beacon, beacon_len) != RADIO_TX_OK){
       return -1;
     }
     beacon_num ++;
 
     /* wait for beacon_ack*/
-    (*acked) = plb_wait_ack();
-    if(*acked){
-      printf("ack!\n");
-    }
+    //test
+	wt = RTIMER_NOW();
+	while (RTIMER_CLOCK_LT(RTIMER_NOW(), wt + INTER_PACKET_INTERVAL)) {}
+		printf("detect ack 1\n");
+	if ((NETSTACK_RADIO.receiving_packet() ||
+			NETSTACK_RADIO.pending_packet() ||
+			NETSTACK_RADIO.channel_clear() == 0)) {
+		printf("detect ack 2\n");
+	}
+//    (*acked) = plb_wait_ack();
+//    if(*acked){
+//      printf("ack!\n");
+//    }
   }
   radio_off();
   return 0;
@@ -484,7 +497,7 @@ static char
 plb_powercycle(void)
 {
 
-//  PRINTF("plb_powercycle\n");
+  PRINTF("plb_powercycle\n");
 
   PT_BEGIN(&pt);
 
@@ -502,7 +515,7 @@ plb_powercycle(void)
     
     /* off */
     if(wait_packet == 0){
-//      radio_off();
+      radio_off();
     }
     rtimer_set(&rt, RTIMER_NOW() + PC_OFF_TIME, 1,
 	       (void (*)(struct rtimer *, void *))plb_powercycle, NULL);
@@ -518,6 +531,22 @@ static void hold_time(rtimer_clock_t interval)
   rct = RTIMER_NOW();
   while(RTIMER_CLOCK_LT(RTIMER_NOW(), rct+interval)){
   }
+}
+static void recv_time(rtimer_clock_t interval)
+{
+	int len;
+	uint8_t ackbuf[ACK_LEN];
+	rtimer_clock_t rct;
+	rct = RTIMER_NOW();
+	while(RTIMER_CLOCK_LT(RTIMER_NOW(), rct+interval)){
+		len = NETSTACK_RADIO.read(ackbuf, ACK_LEN);
+		if(len>0){
+			printf("len:%d\n",len);
+			print_packet(ackbuf, len);
+			break;
+		}
+	}
+	printf("...gg...\n");
 }
 /*---------------------------------------------------------------------------*/
 static void print_packet(uint8_t *packet, int len)
