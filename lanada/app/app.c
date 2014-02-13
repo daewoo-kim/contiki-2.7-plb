@@ -191,11 +191,12 @@ Sensor_calc(int data)
 static uint8_t
 Plb_on()
 {
-	NETSTACK_RDC.on();
+
 	//sending a signal to plb layer
 #if DEBUGPRINT
 	printf("Sending a signal to plb\n");
 #endif
+	NETSTACK_RDC.on();
 	return 1;
 }
 
@@ -267,6 +268,8 @@ Sync_modifying(int clock_drift)
 PROCESS_THREAD(app_layer_process, ev, data)
 {
 	int sensor_value; // type check
+	static struct etimer et;
+
 	PROCESS_EXITHANDLER(unicast_close(&uc);)
 
 	PROCESS_BEGIN();
@@ -294,6 +297,8 @@ PROCESS_THREAD(app_layer_process, ev, data)
 #endif
 		while(!is_sleep_mode) // can i replace it with PROCESS_WAIT_UNTIL or some PROCESS function?
 		{
+		  etimer_set(&et, CLOCK_SECOND/1000);
+		  PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 			//waiting
 		}
