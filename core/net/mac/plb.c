@@ -61,7 +61,7 @@
 /*---------------------------------------------------------------------------*/
 /* Constans */
 #define RTIMER_ARCH_MSECOND RTIMER_ARCH_SECOND/100
-#define BEACON_NUM_MAX 3 //3 //kdw
+#define BEACON_NUM_MAX 20 //3 //kdw
 #define PC_ON_TIME RTIMER_ARCH_MSECOND*100
 #define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
 #define MAX_BEACON_SIZE 100
@@ -256,8 +256,11 @@ plb_input(void)
 		uint8_t ack[MAX_ACK_SIZE];
 		int ack_len = 0;
 		int common_len = 0;
-		PRINTF("plb_send_ack; dst: %u.%u\n",packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0],packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[1]);
-		if ((common_len = plb_create_header(packetbuf_addr(PACKETBUF_ADDR_SENDER), (uint16_t)4)) < 0) // type 4 = ack
+		addr_ack.u8[0]=packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[0];
+		addr_ack.u8[1]=packetbuf_addr(PACKETBUF_ADDR_SENDER)->u8[1];
+
+		PRINTF("plb_send_ack; dst: %u.%u\n",addr_ack.u8[0],addr_ack.u8[1]);
+		if ((common_len = plb_create_header(&addr_ack, (uint16_t)4)) < 0) // type 4 = ack
 		{
 			PRINTF("ERROR: plb_create_header ");
 			return;
@@ -270,8 +273,9 @@ plb_input(void)
 			return ;
 		}
 		memcpy(ack, packetbuf_hdrptr(), common_len);
-		ack[common_len] = 4;// type 4 = ack
-		PRINTF("(ack)pbe len: %u | %u\n", packetbuf_hdrlen(), packetbuf_datalen()); PRINTF("data: %s\n", (char*) packetbuf_dataptr());
+		ack[common_len] = 5;// type 4 = ack
+		PRINTF("(ack)pbe len: %u | %u\n", packetbuf_hdrlen(), packetbuf_datalen());
+		PRINTF("data: %s\n", (char*) packetbuf_dataptr());
 
 		// Send beacon and wait ack : BEACON_NUM_MAX times //
 		radio_on();
@@ -359,17 +363,15 @@ plb_create_header(rimeaddr_t *dst, uint16_t type)
 static int
 plb_wait_ack(void)
 {
-
+  uint8_t ackbuf[ACK_LEN + 2];
+  int len;
   PRINTF("plb_wait_ack\n");
 
   wait_packet = 1;
   
   int ack_received = 0;
-  recv_time(INTER_PACKET_INTERVAL*5000);
+  hold_Time(INTER_PACKET_INTERVAL*5000);
   
-  //// test
-//  printf("%d, %d, %d",NETSTACK_RADIO.receiving_packet(),NETSTACK_RADIO.pending_packet(),NETSTACK_RADIO.channel_clear());
-  ////
 
   /* Check for incoming ACK. */
   if((NETSTACK_RADIO.receiving_packet() ||
@@ -378,10 +380,11 @@ plb_wait_ack(void)
 	  PRINTF("plb_wait_ack: have some packet\n");
 
       
-//    hold_time(AFTER_ACK_DETECTECT_WAIT_TIME);
-//
-//    len = NETSTACK_RADIO.read(ackbuf, ACK_LEN);
+    hold_time(AFTER_ACK_DETECTECT_WAIT_TIME);
+
+    len = NETSTACK_RADIO.read(ackbuf, ACK_LEN);
     
+
 //    if(len == ACK_LEN) {
 //      /* fill this : ack check */
 //      ack_received = 1;
@@ -424,7 +427,7 @@ plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
   int beacon_num = 0;
   radio_on();
   while((beacon_num < BEACON_NUM_MAX) && ((*acked) == 0)){
-    //print_packet(beacon, beacon_len);
+    print_packet(beacon, beacon_len);
     if(NETSTACK_RADIO.send(beacon, beacon_len) != RADIO_TX_OK){
       return -1;
     }
@@ -434,11 +437,11 @@ plb_send_strobe(rimeaddr_t *dst, int *acked, uint16_t type)
     //test
 	wt = RTIMER_NOW();
 	while (RTIMER_CLOCK_LT(RTIMER_NOW(), wt + INTER_PACKET_INTERVAL)) {}
-		printf("detect ack 1\n");
+//		printf("detect ack 1\n");
 	if ((NETSTACK_RADIO.receiving_packet() ||
 			NETSTACK_RADIO.pending_packet() ||
 			NETSTACK_RADIO.channel_clear() == 0)) {
-		printf("detect ack 2\n");
+		printf("*** detect ack 2\n");
 	}
 //    (*acked) = plb_wait_ack();
 //    if(*acked){
