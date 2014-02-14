@@ -48,6 +48,15 @@ extern const struct rdc_driver plb_driver;
 struct plb_beacon_hdr{
   uint8_t type;
 };
+
+struct plb_clock_hdr{
+  uint8_t type1;
+  uint8_t type2;
+  uint8_t type3;
+  uint8_t type4;
+  uint8_t type5;
+};
+
 /* DATA|PREAMBLE|BEACON|ACK */
 /* ex) DATA_ACK : TYPE_DATA|TYPE_ACK */
 #define TYPE_ACK          0x1
