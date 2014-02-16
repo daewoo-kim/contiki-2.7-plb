@@ -206,6 +206,9 @@ Send(packet_type type)
 
 	if(type==DATA) //if type is DATA
 	{
+#if DEBUGPRINT
+	printf("[APP] send data (%d)\n",result_data);
+#endif
 		packetbuf_set_attr(PACKETBUF_ATTR_PACKET_TYPE,DATA);
 		//send DATA to NEXT node
 		return unicast_send(&uc, packetbuf_addr(PACKETBUF_ADDR_NEXT));//TR result return
@@ -287,7 +290,7 @@ PROCESS_THREAD(app_layer_process, ev, data)
 		result_data=Sensor_calc(sensor_value);
 
 		Plb_on();
-		if(!rimeaddr_node_addr.u8[0])
+		if(rimeaddr_node_addr.u8[0]==1 && rimeaddr_node_addr.u8[1]==0)
 		{
 			Data_aggregation();
 			Send(DATA);
