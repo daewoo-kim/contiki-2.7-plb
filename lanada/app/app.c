@@ -46,8 +46,8 @@
 #include "dev/leds.h"
 
 #include <stdio.h>
-
 #define DEBUGPRINT 1
+
 
 /*---------------------------------------------------------------------------*/
 PROCESS(app_layer_process, "Sensor network App layer start");
@@ -61,7 +61,6 @@ static uint8_t result_data;
 static packet_type is_data_or_sync;
 
 static int clock_drift;
-
 static uint8_t is_sleep_mode;
 
 /*---------------------------------------------------------------------------*/
@@ -142,21 +141,16 @@ Address_setup()
 {
 	rimeaddr_t next_node_addr;
 	rimeaddr_t prev_node_addr;
-	if(rimeaddr_node_addr.u8[0]==0)
+	if(rimeaddr_node_addr.u8[0]==1)
 	{
 		packetbuf_set_datalen(0);
-		next_node_addr.u8[0]=rimeaddr_node_addr.u8[0]+1;
-		next_node_addr.u8[1]=rimeaddr_node_addr.u8[1];
-		prev_node_addr.u8[0]=-1; //it indicates END node
-		prev_node_addr.u8[1]=-1; //it only can handle the case of MAX_NODE <256
+
 	}
-	else
-	{
-		next_node_addr.u8[0]=rimeaddr_node_addr.u8[0]+1;
-		next_node_addr.u8[1]=rimeaddr_node_addr.u8[1];
-		prev_node_addr.u8[0]=rimeaddr_node_addr.u8[0]-1;
-		prev_node_addr.u8[1]=rimeaddr_node_addr.u8[1]; //it only can handle the case of MAX_NODE <256
-	}
+	next_node_addr.u8[0]=rimeaddr_node_addr.u8[0]+1;
+	next_node_addr.u8[1]=rimeaddr_node_addr.u8[1];
+	prev_node_addr.u8[0]=rimeaddr_node_addr.u8[0]-1;
+	prev_node_addr.u8[1]=rimeaddr_node_addr.u8[1]; //it only can handle the case of MAX_NODE <256
+
 	packetbuf_set_addr(PACKETBUF_ADDR_NOW,&rimeaddr_node_addr);
 	packetbuf_set_addr(PACKETBUF_ADDR_NEXT,&next_node_addr);
 	packetbuf_set_addr(PACKETBUF_ADDR_PREVIOUS,&prev_node_addr);
@@ -226,7 +220,7 @@ static void
 Data_aggregation()
 {
 	uint16_t length=packetbuf_datalen();
-	uint16_t bit_length=(uint16_t)rimeaddr_node_addr.u8[0]+2; //this length means bit level, the bit position that is result data locates
+	uint16_t bit_length=(uint16_t)rimeaddr_node_addr.u8[0]+1; //this length means bit level, the bit position that is result data locates
 	uint8_t index,shift_amt; //ptr index value, the number of shift operations to apply
 	uint8_t *dataptr_temp;
 	dataptr_temp=(uint8_t *)packetbuf_dataptr();
@@ -284,6 +278,9 @@ PROCESS_THREAD(app_layer_process, ev, data)
 	printf("Setting a unicast channel\n");
 #endif
 	Address_setup();
+
+
+
 	while(1) {
 		is_sleep_mode=0;
 		sensor_value=Sensor_start();
@@ -298,23 +295,25 @@ PROCESS_THREAD(app_layer_process, ev, data)
 #if DEBUGPRINT
 		printf("waiting until intterupt\n");
 #endif
+//		PROCESS_WAIT_EVENT_UNTIL(is_sleep_mode);
 		while(!is_sleep_mode) // can i replace it with PROCESS_WAIT_UNTIL or some PROCESS function?
 		{
-		  etimer_set(&et, CLOCK_SECOND/1000);
-		  PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-
+			  etimer_set(&et, CLOCK_SECOND/1000);
+			  PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 			//waiting
 		}
 #if DEBUGPRINT
 		printf("goto sleep mode, wake up after 21days\n");
 #endif
 		//goto sleep mode and prepare clock to wake up
-		while(1) // replace it with PROCESS_WAIT_UNTIL/ same as above
+		/*while(1) // replace it with PROCESS_WAIT_UNTIL/ same as above
 		{
 			//clock tic tok
-		}
+		}*/
 
 	}
+
+
 
 	PROCESS_END();
 }
