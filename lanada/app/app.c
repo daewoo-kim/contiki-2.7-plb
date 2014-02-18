@@ -79,6 +79,7 @@ static void Sync_modifying(int);
 static void
 recv_uc(struct unicast_conn *c, const rimeaddr_t *from)
 {
+	printf("[APP] recv callback\n");
 	uint8_t* packet_temp;
 	uint8_t check_bit;
 	packet_temp=(uint8_t*)packetbuf_dataptr();

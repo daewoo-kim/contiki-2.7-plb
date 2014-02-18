@@ -28,10 +28,10 @@
 /* Constans */
 #define RTIMER_ARCH_MSECOND RTIMER_ARCH_SECOND/1000
 #define STROBE_NUM_MAX 50 //3 //kdw
-//#define PC_ON_TIME RTIMER_ARCH_MSECOND*100
-//#define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
-#define PC_ON_TIME (RTIMER_ARCH_SECOND / 160) //JJH3
-#define PC_OFF_TIME (RTIMER_ARCH_SECOND / NETSTACK_RDC_CHANNEL_CHECK_RATE - PC_ON_TIME) //JJH3
+#define PC_ON_TIME RTIMER_ARCH_MSECOND*100
+#define PC_OFF_TIME RTIMER_ARCH_MSECOND*100
+//#define PC_ON_TIME (RTIMER_ARCH_SECOND / 160) //JJH3
+//#define PC_OFF_TIME (RTIMER_ARCH_SECOND / NETSTACK_RDC_CHANNEL_CHECK_RATE - PC_ON_TIME) //JJH3
 #define MAX_STROBE_SIZE 100
 #define MAX_ACK_SIZE 100
 #define MAX_SYNC_SIZE 100
@@ -397,18 +397,18 @@ plb_send_data(mac_callback_t sent, void *ptr)
 
 	if(packetbuf_attr(PACKETBUF_ATTR_PACKET_TYPE)==0) //if packet_type ==0, DATA JJH_START
 	{
-		plb_send_strobe(&addr_next,&acked,PREAMBLE);
+		plb_send_strobe(packetbuf_addr(PACKETBUF_ADDR_NEXT),&acked,PREAMBLE);
 		if(acked==1)
 		{
 			PRINTF("plb_send_data DATA_PREAMBLE_ACKED!\n");
 			packetbuf_clear();
 			packetbuf_copyfrom(dataptr_temp,temp_len);
-			if (plb_create_header(&addr_next,DATA) < 0)
+			if (plb_create_header(packetbuf_addr(PACKETBUF_ADDR_NEXT),DATA) < 0)
 			{
 				PRINTF("ERROR: plb_create_header ");
 				return -1; //ERROR case : -1
 			}
-			hold_time(INTER_PACKET_INTERVAL * 5000); //future
+//			hold_time(INTER_PACKET_INTERVAL * 5000); //future
 			radio_on();
 			PRINTF("plb_send_data send DATA packet\n");
 			print_packet(packetbuf_hdrptr(), packetbuf_totlen());
